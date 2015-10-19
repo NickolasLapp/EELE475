@@ -2,6 +2,7 @@
 
 static const char END_CMD_CHAR = '\n';
 static const char DELIMITER = ',';
+static const char CHECKSUM_INDICATOR= '*';
 
 static const char* GPGGA = "$GPGGA";
 #define GPGGA_ID_LEN 6
@@ -51,6 +52,7 @@ int main()
             printf("Resetting outputlen to 0\n");
             outputLen = 0;
         }
+
     }
     return 0;
 }
@@ -62,7 +64,8 @@ int main()
 
 static int isValidInput(char input);
 static void writeToOut(char input, char* output, int *outputLen);
-
+static void updateChecksum(Decoder * decoder, char inputChar);
+static int hexToInt(char input);
 int initDecoder(Decoder* decoder)
 {
     if(!decoder)
@@ -72,6 +75,8 @@ int initDecoder(Decoder* decoder)
     decoder->commasFound = 0;
     decoder->cmdIdx      = 0;
     decoder->GSA_possible = decoder->GGA_possible = 1;
+    decoder->checkSumCalcd = decoder->checkSumRecvd = 0;
+    decoder->checkSumIdx = 0;
     return SUCCESS;
 }
 
@@ -87,6 +92,7 @@ enum ERR_CODE parse(char inputChar, Decoder* decoder, char* output, int *outputL
         return SUCCESS;
     }
 
+
     switch(decoder->decodeState) {
         case ERR_STATE:
             DEBUG_MSG("ERR state");
@@ -94,6 +100,7 @@ enum ERR_CODE parse(char inputChar, Decoder* decoder, char* output, int *outputL
             break;
         case START_STATE:
             DEBUG_MSG("START state");
+            updateChecksum(decoder, inputChar);
             if(decoder->cmdIdx == GPGGA_ID_LEN && decoder->GGA_possible) {
                 decoder->decodeState = GPGGA_FIELDS_STATE;
             } else if(decoder->cmdIdx > GPGGA_ID_LEN
@@ -113,6 +120,12 @@ enum ERR_CODE parse(char inputChar, Decoder* decoder, char* output, int *outputL
             break;
         case GPGGA_FIELDS_STATE:
             DEBUG_MSG("GPGGA_FIELDS_STATE");
+            updateChecksum(decoder, inputChar);
+
+            if(inputChar == CHECKSUM_INDICATOR) {
+                decoder->decodeState = CHECKSUM_STATE;
+                return SUCCESS;
+            }
             if(decoder->commasFound == GPGGA_TIME_IDX) {
                 if(inputChar == DELIMITER) {
                     decoder->commasFound++;
@@ -158,6 +171,13 @@ enum ERR_CODE parse(char inputChar, Decoder* decoder, char* output, int *outputL
             break;
         case  GPGSA_FIELDS_STATE:
             DEBUG_MSG("GPGSA_FIELDS_STATE");
+            updateChecksum(decoder, inputChar);
+
+            if(inputChar == CHECKSUM_INDICATOR) {
+                decoder->decodeState = CHECKSUM_STATE;
+                return SUCCESS;
+            }
+
             if(decoder->commasFound >= MIN_SAT_IDX
                     && decoder->commasFound <= MAX_SAT_IDX) {
                 if(inputChar == DELIMITER) {
@@ -172,6 +192,21 @@ enum ERR_CODE parse(char inputChar, Decoder* decoder, char* output, int *outputL
             } else if(inputChar == DELIMITER)
                 decoder->commasFound++;
             break;
+        case CHECKSUM_STATE:
+            DEBUG_MSG("Inside checksum\n");
+            if(hexToInt(inputChar) != -1)
+                decoder->checkSumRecvd += decoder->checkSumIdx == 0 ?
+                    hexToInt(inputChar) * 16 : hexToInt(inputChar);
+
+
+            if(decoder->checkSumIdx == 1) {
+                printf("calced checksum = %d\t", decoder->checkSumCalcd);
+                printf("revd checksum = %d\n", decoder->checkSumRecvd);
+                return decoder->checkSumCalcd == decoder->checkSumRecvd ?
+                    CHECKSUM_MATCH : BAD_CHECKSUM_ERR;
+            }
+            decoder->checkSumIdx++;
+            break;
     }
     return SUCCESS;
 }
@@ -183,8 +218,6 @@ static int isValidInput(char input)
     if(input == 'N' || input == 'S' || input == 'E' || input == 'W')
         return 1;
     if(input == '.')
-        return 1;
-    if(input == '*')
         return 1;
     DEBUG_MSG("Returning that input is invalid");
     return 0;
@@ -199,4 +232,34 @@ static void writeToOut(char input, char* output, int *outputLen)
     *(output + *outputLen) = input;
     (*outputLen)++;
     printf("outputLen = %d\n", *outputLen);
+}
+
+static void updateChecksum(Decoder * decoder, char inputChar)
+{
+    if(!decoder || decoder->cmdIdx == 0) {
+        printf("Bad args to updateChecksum. decodernull?%d cmdidx=%d\n",
+                decoder==NULL, decoder->cmdIdx);
+        return;
+    }
+
+    printf("inputChar in updatechecksum = %c checksum=%d checksum^input=%d\n",
+            inputChar, decoder->checkSumCalcd, decoder->checkSumCalcd^inputChar);
+    decoder->checkSumCalcd ^= inputChar;
+    return;
+}
+
+static int hexToInt(char input)
+{
+    if(input >= '0' && input <= '9') {
+        printf("hex to int returning: %d", input-'0');
+        return input - '0';
+    }
+    if(input >= 'A' && input <= 'F') {
+        printf("hex to int returning: %d", input-'A' + 10);
+        return input - 'A' + 10;
+    }
+
+    printf("Hex to int returning from ERR: %d", -1);
+    return -1;
+
 }
