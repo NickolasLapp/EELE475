@@ -139,25 +139,6 @@ int main()
     if(!in) {
         return -1;
     }
-/*
- *
- *    char output[MAX_CHARS_TO_READ];
-    int  outputLen = 0;
-    char time[100], height[100], lat[100], lon[100];
-    char sat0[100], sat1[100], sat2[100], sat3[100];
-    char *sats[4];
-    int satIdx = 0;
-
-    sats[0] = sat0;
-    sats[1] = sat1;
-    sats[2] = sat2;
-    sats[3] = sat3;
-
-    Decoder decoder = {0};
-
-    if(initDecoder(&decoder) != SUCCESS) {
-        return -1;
-    } */
 
     while((read = fgetc(in)) != EOF)
     {
@@ -178,44 +159,6 @@ int main()
             printf("\n");
             readGSAFinished(storage);
         }
-
-/*        int ret = parse(read, &decoder, output, &outputLen);
-        if(valFound(ret)) {
-            output[outputLen] = '\0';
-            outputLen = 0;
-
-            switch(ret) {
-                case GPGGA_TIME_FOUND:
-                    strncpy(time, output, sizeof(time));
-                    break;
-                case GPGGA_HEIGHT_FOUND:
-                    strncpy(height, output, sizeof(height));
-                    break;
-                case GPGGA_LATITUDE_FOUND :
-                    strncpy(lat, output, sizeof(lat));
-                    break;
-                case GPGGA_LONGITUDE_FOUND:
-                    strncpy(lon, output, sizeof(lon));
-                    break;
-                case GPGSA_SAT_FOUND:
-                    strncpy(*(sats + satIdx), output, 5);
-                    ++satIdx;
-                    satIdx = satIdx%4;
-                    break;
-            }
-        } else if(ret == CHECKSUM_MATCH) {
-            printf("time:%s\theight:%s\tlat:%s\tlon%s\n", time, height, lat, lon);
-            for(satIdx = 0; satIdx < 4; satIdx++)
-                printf("sat%d:%s\t", satIdx, sats[satIdx]);
-            printf("\n");
-            outputLen = 0;
-            satIdx=0;
-        } else if(ret == BAD_CHECKSUM_ERR) {
-            printf("Checksum did not match\n");
-            printf("checkSumRecvd:%d\tcheckSumCalcd:%d\n",
-                    decoder.checkSumCalcd, decoder.checkSumRecvd);
-            outputLen = 0;
-        } */
     }
     return 0;
 }

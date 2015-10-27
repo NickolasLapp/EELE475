@@ -1,6 +1,6 @@
 CC=gcc
-CFLAGS=-Wall -I ../include
-OBJ = GPS_parser.o
+CFLAGS=-Wall -Wextra -I ../include
+OBJ = GPS_parser
 DEPS = GPS_parser.h
 %.o: %.c
 	$(CC) -ggdb -c -o $@ $< $(CFLAGS)
