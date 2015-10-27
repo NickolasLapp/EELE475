@@ -1,17 +1,5 @@
 #define MAX_CHARS_TO_READ 1000
 
-enum GPGSA_Data_IDX {
-    MIN_SAT_IDX = 2,
-    MAX_SAT_IDX = 9
-};
-
-enum GPGGA_Data_IDX {
-    GPGGA_TIME_IDX = 0,
-    GPGGA_LATITUDE_IDX = 1,
-    GPGGA_LONGITUDE_IDX = 3,
-    GPGGA_HEIGHT_IDX = 8
-};
-
 enum State {
     INVALID_INPUT_STATE = -2,
     ERR_STATE = -1,
@@ -40,22 +28,5 @@ enum ERR_CODE {
 
 };
 
-struct Decoder {
-    enum   State  decodeState;
-
-    int    GSA_possible, GGA_possible;
-
-    int    cmdIdx;
-    int    commasFound;
-    int    checkSumCalcd;
-    int    checkSumRecvd;
-};
 
 typedef struct Data_Storage Data_Storage;
-
-
-typedef struct Decoder Decoder;
-
-int initDecoder();
-enum ERR_CODE parse(char inputChar, Decoder* decoder, char* output, int *outputLen);
-
