@@ -1,6 +1,6 @@
 #include "GPS_parser.h"
 
-#include <stdio.h>
+#define NULL 0
 
 static const char* INIT_STRING= "I AM INIT";
 #define INIT_STRING_LEN 9
@@ -51,7 +51,6 @@ static int hexToInt(char input);
 static int valid_IDX(int curIDX, int state);
 static int GPGGA_IDX_to_enum(int idx);
 static int GPGSA_IDX_to_enum(int idx);
-static const char* GPGGA_IDX_to_string(int idx);
 static int valFound(int ret);
 static int isStructInit(char* beenInit);
 void XSTRNCPY(char*dest,const char*src, int maxIdx);
@@ -75,7 +74,7 @@ enum GPGGA_Data_IDX {
     GPGGA_HEIGHT_IDX = 8
 };
 
-int drive(char* storage, int storage_avail, char inputChar)
+int drive(char* storage, unsigned storage_avail, char inputChar)
 {
     int ret = 0;
 
@@ -120,15 +119,14 @@ int drive(char* storage, int storage_avail, char inputChar)
     } else if(ret == BAD_CHECKSUM_ERR) {
         data->outputLen = 0;
     }
+    return SUCCESS;
 }
 
-#define DEBUG_ON
 #ifdef DEBUG_ON
     #include <string.h>
-static DEBUG_MSG(const char* msg)
-{
-    printf("%s\n", msg);
-}
+    #include <stdio.h>
+
+#define DEBUG_MSG(msg) printf("%s\n", msg);
 
 int main()
 {
@@ -142,7 +140,9 @@ int main()
 
     while((read = fgetc(in)) != EOF)
     {
-        drive(storage, sizeof(storage), read);
+        if(drive(storage, sizeof(storage), read) == FATAL_FAILURE) {
+            break;
+        }
         if(ggaReady(storage)) {
             printf("gga data: %s\n", getTime(storage));
             readGGAFinished(storage);
@@ -162,14 +162,12 @@ int main()
     }
     return 0;
 }
-
 #else
     #define DEBUG_MSG(input) ()
 #endif
 
 int initDecoder(Decoder* decoder)
 {
-    int idx;
     if(!decoder)
         return BAD_FUNC_ARGS_ERR;
 
@@ -206,7 +204,6 @@ int parse(char inputChar, Decoder* decoder, char* output, int *outputLen)
                     || inputChar != GPGGA[decoder->cmdIdx]) {
                 decoder->GGA_possible = 0;
             }
-
             if(decoder->cmdIdx == GPGSA_ID_LEN && decoder->GSA_possible) {
                 decoder->decodeState = GPGSA_FIELDS_STATE;
             } else if(decoder->cmdIdx > GPGSA_ID_LEN
@@ -214,7 +211,6 @@ int parse(char inputChar, Decoder* decoder, char* output, int *outputLen)
                 decoder->GSA_possible = 0;
             }
             decoder->cmdIdx++;
-
             break;
         case GPGGA_FIELDS_STATE:
         case GPGSA_FIELDS_STATE:
@@ -252,6 +248,8 @@ int parse(char inputChar, Decoder* decoder, char* output, int *outputLen)
 
             return decoder->checkSumCalcd == decoder->checkSumRecvd ?
                 CHECKSUM_MATCH : BAD_CHECKSUM_ERR;
+        case DONE_STATE:
+            break;
     }
     return SUCCESS;
 }
@@ -275,7 +273,7 @@ static void writeToOut(char input, char* output, int *outputLen)
 
 static void updateChecksum(Decoder * decoder, char inputChar)
 {
-    if(!decoder || decoder->cmdIdx == 0) {
+    if(!decoder || inputChar == '$') {
         return;
     }
     decoder->checkSumCalcd ^= inputChar;
@@ -334,28 +332,6 @@ static int GPGGA_IDX_to_enum(int idx)
 static int GPGSA_IDX_to_enum(int idx) {
     if(idx >= MIN_SAT_IDX && idx <= MAX_SAT_IDX)
         return GPGSA_SAT_FOUND; return BAD_FUNC_ARGS_ERR;
-}
-
-static const char* GPGSA_IDX_to_string(int idx) {
-    if(idx >= MIN_SAT_IDX && idx <= MAX_SAT_IDX)
-        return "GPGSA_SAT_FOUND";
-    return "BAD_FUNC_ARGS_ERR";
-}
-
-static const char* GPGGA_IDX_to_string(int idx)
-{
-    switch(idx) {
-        case GPGGA_HEIGHT_IDX:
-            return "GPGGA_HEIGHT_FOUND";
-        case GPGGA_LATITUDE_IDX:
-            return "GPGGA_LATITUDE_FOUND";
-        case GPGGA_LONGITUDE_IDX:
-            return "GPGGA_LONGITUDE_FOUND";
-        case GPGGA_TIME_IDX:
-            return "GPGGA_TIME_FOUND";
-        default:
-            return "BAD_FUNC_ARGS_ERR";
-    }
 }
 
 static int valFound(int ret)

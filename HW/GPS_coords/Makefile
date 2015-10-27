@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-Wall -Wextra -I ../include
+CFLAGS=-Wall -Wextra -Wunused -Werror -Wno-missing-field-initializers -Wno-missing-braces -DDEBUG_ON
 OBJ = GPS_parser
 DEPS = GPS_parser.h
 %.o: %.c
@@ -8,7 +8,7 @@ DEPS = GPS_parser.h
 all-am: GPS_parser
 
 GPS_parser: GPS_parser.c
-	$(CC) -ggdb -o $(OBJ) $(DEPS) GPS_parser.c
+	$(CC) -ggdb -o $(OBJ) $(DEPS) GPS_parser.c $(CFLAGS)
 
 .PHONY: clean
 
