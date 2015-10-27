@@ -19,7 +19,8 @@ enum State {
     START_STATE,
     GPGGA_FIELDS_STATE,
     GPGSA_FIELDS_STATE,
-    CHECKSUM_STATE,
+    CHECKSUM_STATE_1,
+    CHECKSUM_STATE_2,
     DONE_STATE
 };
 
@@ -48,8 +49,10 @@ struct Decoder {
     int    commasFound;
     int    checkSumCalcd;
     int    checkSumRecvd;
-    short  checkSumIdx;
 };
+
+typedef struct Data_Storage Data_Storage;
+
 
 typedef struct Decoder Decoder;
 
