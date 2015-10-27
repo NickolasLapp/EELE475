@@ -1,18 +1,16 @@
 #include "GPS_parser.h"
 
 #define NULL 0
-
 static const char* INIT_STRING= "I AM INIT";
 #define INIT_STRING_LEN 9
 #define DATA_MAX_SZ 100
-
-#define NUM_GGA_DATA 4
-#define NUM_SATS 9
-
 #define TIME_IDX 0
 #define LAT_IDX  1
-#define LON_IDX  2
-#define HEIGHT_IDX   3
+#define LAT_DIR_IDX 2
+#define LON_IDX  3
+#define LON_DIR_IDX 4
+#define HEIGHT_IDX  5
+#define HEIGHT_IDX  5
 
 typedef struct Decoder {
     enum   State  decodeState; /*current state of decoding */
@@ -54,13 +52,7 @@ static int GPGSA_IDX_to_enum(int idx);
 static int valFound(int ret);
 static int isStructInit(char* beenInit);
 void XSTRNCPY(char*dest,const char*src, int maxIdx);
-int ggaReady(char * storage);
-int gsaReady(char * storage);
-char * getTime(char*storage);
 static int initData(Data_Storage * data);
-void readGGAFinished(char* storage);
-char* getSat(char *storage, int idx);
-void readGSAFinished(char* storage);
 
 enum GPGSA_Data_IDX {
     MIN_SAT_IDX = 2,
@@ -70,7 +62,9 @@ enum GPGSA_Data_IDX {
 enum GPGGA_Data_IDX {
     GPGGA_TIME_IDX = 0,
     GPGGA_LATITUDE_IDX = 1,
+    GPGGA_LATITUDE_DIR_IDX = 2,
     GPGGA_LONGITUDE_IDX = 3,
+    GPGGA_LONGITUDE_DIR_IDX = 4,
     GPGGA_HEIGHT_IDX = 8
 };
 
@@ -102,8 +96,14 @@ int drive(char* storage, unsigned storage_avail, char inputChar)
             case GPGGA_LATITUDE_FOUND :
                 XSTRNCPY(data->ggaData[LAT_IDX], data->output, DATA_MAX_SZ);
                 break;
+            case GPGGA_LATITUDE_DIR_FOUND :
+                XSTRNCPY(data->ggaData[LAT_DIR_IDX], data->output, DATA_MAX_SZ);
+                break;
             case GPGGA_LONGITUDE_FOUND:
                 XSTRNCPY(data->ggaData[LON_IDX], data->output, DATA_MAX_SZ);
+                break;
+            case GPGGA_LONGITUDE_DIR_FOUND :
+                XSTRNCPY(data->ggaData[LON_DIR_IDX], data->output, DATA_MAX_SZ);
                 break;
             case GPGSA_SAT_FOUND:
                 XSTRNCPY(data->gsaData[data->satIdx], data->output, DATA_MAX_SZ);
@@ -113,8 +113,10 @@ int drive(char* storage, unsigned storage_avail, char inputChar)
     } else if(ret == CHECKSUM_MATCH) {
         if(data->decoder.GGA_possible)
             data->ggaReady = 1;
-        else
+        else {
             data->gsaReady = 1;
+            data->satIdx = 0;
+        }
         data->outputLen = 0;
     } else if(ret == BAD_CHECKSUM_ERR) {
         data->outputLen = 0;
@@ -153,7 +155,7 @@ int main()
 
             printf("gsa data: ");
             for(satIdx = 0;
-                    satIdx < MAX_SAT_IDX && (satInfo=getSat(storage, satIdx))!=NULL;
+                    satIdx < NUM_SATS && (satInfo=getSat(storage, satIdx))!=NULL;
                     satIdx++)
                 printf("SatID%d: %s\t", satIdx, satInfo);
             printf("\n");
@@ -300,6 +302,8 @@ static int valid_IDX(int curIDX, int state)
             case GPGGA_LATITUDE_IDX:
             case GPGGA_LONGITUDE_IDX:
             case GPGGA_TIME_IDX:
+            case GPGGA_LONGITUDE_DIR_IDX:
+            case GPGGA_LATITUDE_DIR_IDX:
                 return 1;
                 break;
             default:
@@ -319,13 +323,16 @@ static int GPGGA_IDX_to_enum(int idx)
             return GPGGA_HEIGHT_FOUND;
         case GPGGA_LATITUDE_IDX:
             return GPGGA_LATITUDE_FOUND;
+        case GPGGA_LATITUDE_DIR_IDX:
+            return GPGGA_LATITUDE_DIR_FOUND;
         case GPGGA_LONGITUDE_IDX:
             return GPGGA_LONGITUDE_FOUND;
+        case GPGGA_LONGITUDE_DIR_IDX:
+            return GPGGA_LONGITUDE_DIR_FOUND;
         case GPGGA_TIME_IDX:
             return GPGGA_TIME_FOUND;
-        default:
-            return BAD_FUNC_ARGS_ERR;
     }
+    return -1;
 }
 
 
@@ -340,7 +347,9 @@ static int valFound(int ret)
         case GPGGA_TIME_FOUND:
         case GPGGA_HEIGHT_FOUND:
         case GPGGA_LATITUDE_FOUND :
+        case GPGGA_LATITUDE_DIR_FOUND:
         case GPGGA_LONGITUDE_FOUND:
+        case GPGGA_LONGITUDE_DIR_FOUND:
         case GPGSA_SAT_FOUND:
             return 1;
         default:
@@ -364,12 +373,6 @@ void XSTRNCPY(char*dest, const char*src, int maxIdx)
     for(idx = 0; idx < maxIdx && src[idx!='\0']; idx++)
         dest[idx] = src[idx];
     dest[maxIdx] = '\0';
-}
-
-char * getTime(char*storage)
-{
-    Data_Storage * data = (Data_Storage*)storage;
-    return data->ggaData[TIME_IDX];
 }
 
 int ggaReady(char*storage)
@@ -404,6 +407,7 @@ void readGSAFinished(char* storage)
 {
     Data_Storage * data = (Data_Storage*)storage;
     data->gsaReady = 0;
+    data->satIdx = 0;
 }
 
 char* getSat(char* storage, int idx)
@@ -412,3 +416,106 @@ char* getSat(char* storage, int idx)
     return data->gsaData[idx][0] == '\0' ?
         NULL : data->gsaData[idx];
 }
+
+char * getTime(char*storage)
+{
+    Data_Storage * data = (Data_Storage*)storage;
+    return data->ggaData[TIME_IDX];
+}
+
+char * getHeight(char*storage)
+{
+    Data_Storage * data = (Data_Storage*)storage;
+    return data->ggaData[HEIGHT_IDX];
+}
+
+char * getLat(char*storage)
+{
+    Data_Storage * data = (Data_Storage*)storage;
+    return data->ggaData[LAT_IDX];
+}
+
+char * getLon(char*storage)
+{
+    Data_Storage * data = (Data_Storage*)storage;
+    return data->ggaData[LON_IDX];
+}
+
+char * getLonDir(char*storage)
+{
+    Data_Storage * data = (Data_Storage*)storage;
+    return data->ggaData[LON_DIR_IDX];
+}
+
+char * getLatDir(char*storage)
+{
+    Data_Storage * data = (Data_Storage*)storage;
+    return data->ggaData[LAT_DIR_IDX];
+}
+
+void getTime_formatted(char*storage, char*buffer, int buffLen) 
+{
+    char* time;
+    static const char TIME_STRING[] = "T:XXhXXmXXXXXsec";
+    XSTRNCPY(buffer,TIME_STRING, buffLen);
+    time = getTime(storage);
+
+    buffer[2] = time[0];
+    buffer[3] = time[1];
+    buffer[5] = time[2];
+    buffer[6] = time[3];
+    buffer[8] = time[4];
+    buffer[9] = time[5];
+    buffer[10] = time[6];
+    buffer[11] = time[7];
+    buffer[12] = time[8];
+}
+
+void getHeight_formatted(char*storage, char*buffer, int buffLen)
+{
+    static const char HEIGHT_STRING[] = "E:";
+    XSTRNCPY(buffer, HEIGHT_STRING, buffLen);
+    XSTRNCPY(buffer+sizeof(HEIGHT_STRING)-1, getHeight(storage),
+            buffLen-sizeof(HEIGHT_STRING));
+    buffer[8] = 'M';
+    buffer[9] = 0;
+}
+
+void getLat_formatted(char*storage, char*buffer, int buffLen)
+{
+    char* lat;
+    static const char LAT_STRING[] = "La:XXdegXXXXXXXXminX";
+    XSTRNCPY(buffer, LAT_STRING, buffLen);
+    lat = getLat(storage);
+    buffer[3] = lat[0];
+    buffer[4] = lat[1];
+    buffer[8] = lat[2];
+    buffer[9] = lat[3];
+    buffer[10] = lat[4];
+    buffer[11] = lat[5];
+    buffer[12] = lat[6];
+    buffer[13] = lat[7];
+    buffer[14] = lat[8];
+    buffer[15] = lat[9];
+    buffer[19] = getLatDir(storage)[0];
+}
+
+void getLon_formatted(char*storage, char*buffer, int buffLen)
+{
+    char* lon;
+    static const char LON_STRING[] = "Lo:XXdegXXXXXXXXminX";
+    XSTRNCPY(buffer, LON_STRING, buffLen);
+    lon = getLon(storage);
+    buffer[3] = lon[0];
+    buffer[4] = lon[1];
+    buffer[8] = lon[2];
+    buffer[9] = lon[3];
+    buffer[10] = lon[4];
+    buffer[11] = lon[5];
+    buffer[12] = lon[6];
+    buffer[13] = lon[7];
+    buffer[14] = lon[8];
+    buffer[15] = lon[9];
+    buffer[19] = getLonDir(storage)[0];
+}
+
