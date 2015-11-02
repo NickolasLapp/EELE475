@@ -38,10 +38,13 @@ void readGSAFinished(char* storage);
 char * getSat(char *storage, int idx);
 char * getTime(char*storage);
 char * getHeight(char*storage);
+int getHeightFt(char*storage);
 char * getLat(char*storage);
 char * getLon(char*storage);
 char * getLatDir(char*storage);
 char * getLonDir(char*storage);
+float getLon_float(char*storage);
+float getLat_float(char*storage);
 
 int ggaReady(char * storage);
 int gsaReady(char * storage);

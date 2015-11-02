@@ -1,6 +1,7 @@
 #include "GPS_parser.h"
 
 #define NULL 0
+
 static const char* INIT_STRING= "I AM INIT";
 #define INIT_STRING_LEN 9
 #define DATA_MAX_SZ 100
@@ -53,6 +54,10 @@ static int valFound(int ret);
 static int isStructInit(char* beenInit);
 void XSTRNCPY(char*dest,const char*src, int maxIdx);
 static int initData(Data_Storage * data);
+static int itoa(int i, char b[]);
+static float atof(char* data);
+static int getTimeHours(char*storage);
+static int convertToUTC_7(int hours);
 
 enum GPGSA_Data_IDX {
     MIN_SAT_IDX = 2,
@@ -423,10 +428,45 @@ char * getTime(char*storage)
     return data->ggaData[TIME_IDX];
 }
 
+static int getTimeHours(char*storage)
+{
+    int hours;
+    char* timeString = getTime(storage);
+
+    hours = (timeString[0]-'0')*10 + (timeString[1]-'0');
+    return hours;
+}
+
+static int convertToUTC_7(int hours)
+{
+    int newHours = hours - 7;
+    if(hours <= 0) newHours += 24;
+    return newHours;
+}
+
 char * getHeight(char*storage)
 {
     Data_Storage * data = (Data_Storage*)storage;
     return data->ggaData[HEIGHT_IDX];
+}
+
+int getHeightFt(char*storage)
+{
+    int idx;
+    Data_Storage * data = (Data_Storage*)storage;
+    int heightMeters = 0;
+    int heightFt = 0;
+
+    for(idx = 0; data->ggaData[HEIGHT_IDX][idx] != '.' &&
+            data->ggaData[HEIGHT_IDX][idx] != '\0'; idx++) {
+        heightMeters *= 10;
+        heightMeters += data->ggaData[HEIGHT_IDX][idx] - '0';
+    }
+    heightFt = (int)((double)heightMeters * 3.28084f);
+
+    if(((double)heightMeters * 3.28f) > (double)heightFt + .5f)
+        heightFt++;
+    return heightFt;
 }
 
 char * getLat(char*storage)
@@ -453,69 +493,146 @@ char * getLatDir(char*storage)
     return data->ggaData[LAT_DIR_IDX];
 }
 
-void getTime_formatted(char*storage, char*buffer, int buffLen) 
+void getTime_formatted(char*storage, char*buffer, int buffLen)
 {
     char* time;
-    static const char TIME_STRING[] = "T:XXhXXmXXXXXsec";
+    static const char TIME_STRING[] = "Time: ";
+    int hours;
+    int pm;
+    int written = 6;
+
+    if(buffLen < 25)
+        return;
+
+
     XSTRNCPY(buffer,TIME_STRING, buffLen);
+    hours = convertToUTC_7(getTimeHours(storage));
     time = getTime(storage);
 
-    buffer[2] = time[0];
-    buffer[3] = time[1];
-    buffer[5] = time[2];
-    buffer[6] = time[3];
-    buffer[8] = time[4];
-    buffer[9] = time[5];
-    buffer[10] = time[6];
-    buffer[11] = time[7];
-    buffer[12] = time[8];
+    if(hours > 12) {
+        written += itoa(hours - 12, buffer+6);
+        pm = 1;
+    } else if(hours == 12) {
+        written += itoa(hours, buffer+6);
+        pm = 1;
+    } else if(hours == 0) {
+        written += itoa(hours + 12, buffer+6);
+        pm = 0;
+    } else {
+        written += itoa(hours, buffer+6);
+        pm = 0;
+    }
+
+    buffer[written++] = 'h';
+    buffer[written++] = time[2];
+    buffer[written++] = time[3];
+    buffer[written++] = 'm';
+
+    buffer[written++] = time[4];
+    buffer[written++] = time[5];
+    buffer[written++] = time[6];
+    buffer[written++] = time[7];
+    buffer[written++] = time[8];
+    buffer[written++] = 's';
+
+    buffer[written++] = ' ';
+
+    buffer[written++] = pm ? 'P' : 'A';
+    buffer[written++] = 'M';
+    buffer[written++] = 0;
+}
+
+static int itoa(int i, char b[]){
+    char const digit[] = "0123456789";
+    char* p = b;
+    int shifter = i;
+    int written = 0;
+
+    do{
+        written++;
+        ++p;
+        shifter = shifter/10;
+    }while(shifter);
+    *p = '\0';
+    do{
+        *--p = digit[i%10];
+        i /= 10;
+    }while(i);
+    return written;
+}
+
+static float atof(char* data) {
+    float toReturn = 0.0f;
+    float fractional = 0.0f;
+    int idx;
+
+    for(idx = 0; data[idx] != '.'; idx++) {
+        toReturn *= 10.0f;
+        toReturn += (float)(data[idx] - '0');
+    }
+
+    for(idx++; data[idx] != 0; idx++);
+
+    for(; data[idx] != '.'; idx--)
+    {
+        fractional +=  (float)(data[idx] - '0');
+        fractional /= 10;
+    }
+    return toReturn + fractional;
 }
 
 void getHeight_formatted(char*storage, char*buffer, int buffLen)
 {
-    static const char HEIGHT_STRING[] = "E:";
+    int idx;
+    static const char HEIGHT_STRING[] = "Elev: ";
+    if(buffLen < 10)
+        return;
+
     XSTRNCPY(buffer, HEIGHT_STRING, buffLen);
-    XSTRNCPY(buffer+sizeof(HEIGHT_STRING)-1, getHeight(storage),
-            buffLen-sizeof(HEIGHT_STRING));
-    buffer[8] = 'M';
-    buffer[9] = 0;
+    idx = itoa(getHeightFt(storage), buffer);
+
+    buffer[idx++] = 'f';
+    buffer[idx++] = 't';
+    buffer[idx++] = '\0';
 }
 
 void getLat_formatted(char*storage, char*buffer, int buffLen)
 {
+    static const char LAT_STRING[] = "Lat: XXdeg XXmin X";
     char* lat;
-    static const char LAT_STRING[] = "La:XXdegXXXXXXXXminX";
+    if(buffLen < 17)
+        return;
     XSTRNCPY(buffer, LAT_STRING, buffLen);
     lat = getLat(storage);
-    buffer[3] = lat[0];
-    buffer[4] = lat[1];
-    buffer[8] = lat[2];
-    buffer[9] = lat[3];
-    buffer[10] = lat[4];
-    buffer[11] = lat[5];
-    buffer[12] = lat[6];
-    buffer[13] = lat[7];
-    buffer[14] = lat[8];
-    buffer[15] = lat[9];
-    buffer[19] = getLatDir(storage)[0];
+    buffer[5] = lat[0];
+    buffer[6] = lat[1];
+    buffer[11] = lat[2];
+    buffer[12] = lat[3];
+    buffer[17] = getLatDir(storage)[0];
 }
 
 void getLon_formatted(char*storage, char*buffer, int buffLen)
 {
     char* lon;
-    static const char LON_STRING[] = "Lo:XXdegXXXXXXXXminX";
+    static const char LON_STRING[] = "Lon: XXXdeg XXmin X";
+    if(buffLen < 17)
+        return;
     XSTRNCPY(buffer, LON_STRING, buffLen);
     lon = getLon(storage);
-    buffer[3] = lon[0];
-    buffer[4] = lon[1];
-    buffer[8] = lon[2];
-    buffer[9] = lon[3];
-    buffer[10] = lon[4];
-    buffer[11] = lon[5];
-    buffer[12] = lon[6];
-    buffer[13] = lon[7];
-    buffer[14] = lon[8];
-    buffer[15] = lon[9];
-    buffer[19] = getLonDir(storage)[0];
+    buffer[5] = lon[0];
+    buffer[6] = lon[1];
+    buffer[7] = lon[2];
+    buffer[12] = lon[3];
+    buffer[13] = lon[4];
+    buffer[18] = getLonDir(storage)[0];
 }
 
+float getLon_float(char*storage)
+{
+    return atof(getLon(storage));
+}
+
+float getLat_float(char*storage)
+{
+    return atof(getLat(storage));
+}
